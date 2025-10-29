@@ -1,36 +1,47 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"example/internal/api"
-	"example/internal/dto"
-	"example/internal/repositories"
-	"example/internal/services"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"example/internal/app"
 )
 
-const listenAddress = ":8080"
-
 func main() {
-	ordersService := services.NewOrdersService(
-		repositories.NewOrdersMemoryRepository([]dto.Room{
-			{"reddison", "lux"},
-			{"reddison", "premium"},
-		}),
-	)
-	createOrdersHandler := api.NewCreateOrderHandler(ordersService)
+	// Инициализируем приложение
+	application := app.NewApp()
+	defer application.Close()
 
-	router := chi.NewRouter()
-	router.Use(middleware.Logger)
+	server := application.Server()
 
-	router.Post("/orders", createOrdersHandler.Handle)
+	// Канал для обработки сигналов
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	log.Default().Printf("api server started on %s\n", listenAddress)
-	if err := http.ListenAndServe(listenAddress, router); err != nil {
-		panic(err)
+	// Запуск сервера в отдельной goroutine
+	go func() {
+		log.Printf("api server started on %s\n", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	// Ожидаем сигнал завершения
+	<-sigChan
+
+	// Graceful shutdown — ждём завершения текущих запросов (max 10 секунд)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	log.Println("shutting down server...")
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("shutdown error: %v", err)
 	}
+
+	log.Println("server stopped")
 }

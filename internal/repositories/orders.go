@@ -1,56 +1,40 @@
 package repositories
 
 import (
-	"fmt"
-	"time"
-
 	"example/internal/dto"
 	"example/internal/interfaces"
+	"sync"
 )
 
 type orderMemoryRepository struct {
-	orders []*dto.Order
-
-	rooms []dto.Room
+	orders []dto.Order
+	mu     sync.Mutex
 }
 
-func NewOrdersMemoryRepository(knownRooms []dto.Room) interfaces.OrdersRepository {
+func NewOrdersMemoryRepository() interfaces.OrdersRepository {
 	return &orderMemoryRepository{
-		orders: make([]*dto.Order, 0),
-		rooms:  knownRooms,
+		orders: make([]dto.Order, 0),
 	}
 }
 
-func (o *orderMemoryRepository) Create(order *dto.Order) error {
-	if !o.isKnownRoom(order.HotelID, order.RoomTypeID) {
-		return fmt.Errorf("unknown room")
-	}
-
-	if !o.isRoomAvailable(order.HotelID, order.RoomTypeID, order.From, order.To) {
-		return fmt.Errorf("room not available")
-	}
+func (o *orderMemoryRepository) Create(order dto.Order) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 
 	o.orders = append(o.orders, order)
 	return nil
 }
 
-func (o *orderMemoryRepository) isRoomAvailable(hotelID, roomID string, from, to time.Time) bool {
-	for _, order := range o.orders {
-		if order.HotelID != hotelID || order.RoomTypeID != roomID {
-			continue
-		}
-		if order.From.Before(to) && order.To.After(from) {
-			return false
-		}
-	}
-	return true
-}
+func (o *orderMemoryRepository) GetOrdersByHotelAndRoom(hotelID, roomID string) ([]dto.Order, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 
-func (o *orderMemoryRepository) isKnownRoom(hotelID, roomID string) bool {
-	for _, room := range o.rooms {
-		if room.HotelID == hotelID && room.RoomTypeID == roomID {
-			return true
+	var orders []dto.Order
+	for _, order := range o.orders {
+		if order.HotelID == hotelID && order.RoomTypeID == roomID {
+			orders = append(orders, order)
 		}
 	}
-	return false
+
+	return orders, nil
 }

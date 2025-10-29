@@ -5,5 +5,10 @@ import (
 )
 
 type OrdersRepository interface {
-	Create(order *dto.Order) error
+	Create(order dto.Order) error
+	GetOrdersByHotelAndRoom(hotelID, roomID string) ([]dto.Order, error)
+}
+
+type RoomsRepository interface {
+	GetRoomsByHotel(hotelID string) ([]dto.Room, error)
 }

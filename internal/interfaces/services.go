@@ -5,5 +5,5 @@ import (
 )
 
 type OrdersService interface {
-	Create(order *dto.Order) (*dto.Order, error)
+	Create(order dto.Order) (dto.Order, error)
 }
